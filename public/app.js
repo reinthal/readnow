@@ -183,6 +183,7 @@ function splitSpanIntoWords(span, startIndex) {
 async function renderAllPages() {
   $pdfPages.innerHTML = '';
   state.pdfWordSpans = [];
+  const textParts = [];
   let wordIndex = 0;
   const numPages = state.pdfDoc.numPages;
   for (let i = 1; i <= numPages; i++) {
@@ -204,6 +205,7 @@ async function renderAllPages() {
 
     // Text layer
     const textContent = await page.getTextContent();
+    textParts.push(textContent.items.map(item => item.str).join(' '));
     const textLayerDiv = document.createElement('div');
     textLayerDiv.className = 'textLayer';
     wrapper.appendChild(textLayerDiv);
@@ -226,6 +228,10 @@ async function renderAllPages() {
 
     $pdfPages.appendChild(wrapper);
   }
+
+  // Use pdf.js-extracted text so word indices match the text layer spans
+  state.text = textParts.join(' ');
+  state.words = state.text.split(/\s+/).filter(w => w.length > 0);
 }
 
 // ── Play / Pause / Stop ─────────────────────────────────────

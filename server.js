@@ -80,7 +80,7 @@ function extractWordTimings(alignment) {
 }
 
 // Split text into chunks under maxLen, breaking at sentence boundaries
-const MAX_TTS_CHARS = 5000;
+const MAX_TTS_CHARS = 500;
 
 function chunkText(text, maxLen = MAX_TTS_CHARS) {
   const chunks = [];
