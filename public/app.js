@@ -31,6 +31,10 @@ const state = {
   // WebSocket
   ws: null,
 
+  // PDF text layer
+  pdfWordSpans: [],         // all word <span> elements across pages
+  prevHighlightedSpan: null,
+
   // Settings
   windowSize: 7,
 
@@ -152,18 +156,75 @@ async function handleFile(file) {
 }
 
 // ── PDF Rendering ───────────────────────────────────────────
+function splitSpanIntoWords(span, startIndex) {
+  const text = span.textContent;
+  if (!text || text.trim().length === 0) return startIndex;
+  const tokens = text.match(/(\S+|\s+)/g);
+  if (!tokens) return startIndex;
+  span.textContent = '';
+  let idx = startIndex;
+  const spans = [];
+  for (const token of tokens) {
+    if (/^\s+$/.test(token)) {
+      span.appendChild(document.createTextNode(token));
+    } else {
+      const w = document.createElement('span');
+      w.textContent = token;
+      w.className = 'pdf-word';
+      w.dataset.wordIndex = idx;
+      span.appendChild(w);
+      spans.push(w);
+      idx++;
+    }
+  }
+  return { nextIndex: idx, spans };
+}
+
 async function renderAllPages() {
   $pdfPages.innerHTML = '';
+  state.pdfWordSpans = [];
+  let wordIndex = 0;
   const numPages = state.pdfDoc.numPages;
   for (let i = 1; i <= numPages; i++) {
     const page = await state.pdfDoc.getPage(i);
     const scale = Math.min(1.5, (window.innerWidth - 80) / page.getViewport({ scale: 1 }).width);
     const viewport = page.getViewport({ scale });
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+    wrapper.style.width = viewport.width + 'px';
+    wrapper.style.height = viewport.height + 'px';
+
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    $pdfPages.appendChild(canvas);
+    wrapper.appendChild(canvas);
+
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    // Text layer
+    const textContent = await page.getTextContent();
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    wrapper.appendChild(textLayerDiv);
+
+    const textLayer = new pdfjsLib.TextLayer({
+      textContentSource: textContent,
+      container: textLayerDiv,
+      viewport,
+    });
+    await textLayer.render();
+
+    // Split text spans into individual word spans
+    for (const span of textLayerDiv.querySelectorAll('span')) {
+      const result = splitSpanIntoWords(span, wordIndex);
+      if (result.spans) {
+        state.pdfWordSpans.push(...result.spans);
+        wordIndex = result.nextIndex;
+      }
+    }
+
+    $pdfPages.appendChild(wrapper);
   }
 }
 
@@ -234,6 +295,11 @@ function stopPlayback() {
   state.mediaSource = null;
   state.sourceBuffer = null;
 
+  if (state.prevHighlightedSpan) {
+    state.prevHighlightedSpan.classList.remove('pdf-word-active');
+    state.prevHighlightedSpan = null;
+  }
+
   $wordCounter.textContent = `0 / ${state.words.length} words`;
   renderWindow();
 }
@@ -245,6 +311,8 @@ $newPdfBtn.addEventListener('click', () => {
   state.pdfDoc = null;
   state.text = '';
   state.words = [];
+  state.pdfWordSpans = [];
+  state.prevHighlightedSpan = null;
   $pdfPages.innerHTML = '';
   $pdfViewer.classList.add('hidden');
   $controls.classList.add('hidden');
@@ -387,6 +455,17 @@ function startHighlightLoop() {
       state.currentWordIndex = idx;
       $wordCounter.textContent = `${idx + 1} / ${state.wordTimings.length} words`;
       renderWindow();
+
+      // Highlight word in PDF
+      if (state.prevHighlightedSpan) {
+        state.prevHighlightedSpan.classList.remove('pdf-word-active');
+      }
+      const span = state.pdfWordSpans[idx];
+      if (span) {
+        span.classList.add('pdf-word-active');
+        span.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        state.prevHighlightedSpan = span;
+      }
     }
 
     // Check if playback finished
@@ -405,44 +484,45 @@ function startHighlightLoop() {
 
 // ── Sliding Window Renderer ─────────────────────────────────
 function renderWindow() {
-  $wordsContainer.innerHTML = '';
-
-  // Use timing-derived words if available, otherwise fall back to parsed words
   const wordList = state.wordTimings.length > 0
     ? state.wordTimings.map(wt => wt.word)
     : state.words;
 
-  if (wordList.length === 0) return;
+  if (wordList.length === 0) {
+    $wordsContainer.innerHTML = '';
+    return;
+  }
+
+  // Rebuild spans only when the word list changes
+  if ($wordsContainer.childElementCount !== wordList.length) {
+    $wordsContainer.innerHTML = '';
+    for (let i = 0; i < wordList.length; i++) {
+      const span = document.createElement('span');
+      span.textContent = wordList[i];
+      span.className = 'word';
+      $wordsContainer.appendChild(span);
+    }
+  }
 
   const idx = Math.max(0, state.currentWordIndex);
-  const half = Math.floor(state.windowSize / 2);
+  const children = $wordsContainer.children;
 
-  // Center the window on the current word
-  let start = idx - half;
-  let end = idx + half + 1;
-
-  // Clamp to bounds
-  if (start < 0) {
-    start = 0;
-    end = Math.min(state.windowSize, wordList.length);
-  }
-  if (end > wordList.length) {
-    end = wordList.length;
-    start = Math.max(0, end - state.windowSize);
+  for (let i = 0; i < children.length; i++) {
+    const dist = Math.abs(i - idx);
+    let cls = 'word';
+    if (i === idx && state.currentWordIndex >= 0) cls += ' current';
+    else if (dist <= 1) cls += ' near';
+    children[i].className = cls;
   }
 
-  for (let i = start; i < end; i++) {
-    const span = document.createElement('span');
-    span.textContent = wordList[i];
-
-    const classes = ['word'];
-    if (i === idx && state.currentWordIndex >= 0) {
-      classes.push('current');
-    } else if (Math.abs(i - idx) <= 1) {
-      classes.push('near');
-    }
-    span.className = classes.join(' ');
-    $wordsContainer.appendChild(span);
+  // Translate so the current word is centered in the container
+  const currentSpan = children[idx];
+  if (currentSpan) {
+    const containerWidth = $wordWindow.offsetWidth;
+    const spanLeft = currentSpan.offsetLeft;
+    const spanWidth = currentSpan.offsetWidth;
+    const offset = containerWidth / 2 - spanLeft - spanWidth / 2;
+    $wordsContainer.style.transform = `translateX(${offset}px)`;
   }
 }
 

@@ -2,7 +2,11 @@
 
 ## MCP Usage — Context7
 
-**Always use the Context7 MCP server when available** for looking up documentation of non-standard/third-party packages. Do not rely on training data alone for API details — fetch the latest docs via Context7 first.
+**Always fetch current docs** for non-standard/third-party packages. Do not rely on training data alone for API details.
+
+- Use the `find-docs` skill if available.
+- Use the Context7 MCP server / CLI skill if available.
+- Use whichever is available; if both are, use either.
 
 Packages in this project that require Context7 lookups:
 

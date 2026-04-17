@@ -64,12 +64,12 @@ button {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: center;
   min-height: 80px;
   padding: 16px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
+  overflow: hidden;
 }
 
 #words-container {
@@ -79,7 +79,8 @@ button {
   font-family: var(--font-mono);
   font-size: 1.5rem;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
+  white-space: nowrap;
 }
 
 #words-container .word {
@@ -105,6 +106,9 @@ button {
 
 /* ── Controls Bar ────────────────────────────────────────── */
 #controls {
+  position: sticky;
+  top: 80px;
+  z-index: 99;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -230,6 +234,40 @@ button {
 
 #file-btn:hover {
   filter: brightness(1.15);
+}
+
+/* ── PDF Text Layer ─────────────────────────────────────── */
+.page-wrapper {
+  position: relative;
+}
+
+.textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  line-height: 1.0;
+}
+
+.textLayer > span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+}
+
+.textLayer .pdf-word {
+  color: transparent;
+  border-radius: 2px;
+}
+
+.textLayer .pdf-word-active {
+  background-color: rgba(34, 197, 94, 0.35);
+}
+
+:root.light .textLayer .pdf-word-active {
+  background-color: rgba(22, 163, 74, 0.3);
 }
 
 /* ── PDF Viewer ──────────────────────────────────────────── */

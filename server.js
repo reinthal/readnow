@@ -41,15 +41,8 @@ function extractWordTimings(alignment) {
 
   // Handle both API response formats
   const chars = alignment.characters || alignment.chars || [];
-  let startTimes = alignment.character_start_times_seconds || alignment.charStartTimesMs || [];
-  let endTimes = alignment.character_end_times_seconds || alignment.charEndTimesMs || [];
-
-  // Convert ms to seconds if needed
-  const isMs = Boolean(alignment.charStartTimesMs);
-  if (isMs) {
-    startTimes = startTimes.map(t => t / 1000);
-    endTimes = endTimes.map(t => t / 1000);
-  }
+  const startTimes = alignment.character_start_times_seconds || alignment.characterStartTimesSeconds || [];
+  const endTimes = alignment.character_end_times_seconds || alignment.characterEndTimesSeconds || [];
 
   if (chars.length === 0) return [];
 
@@ -86,6 +79,39 @@ function extractWordTimings(alignment) {
   return words;
 }
 
+// Split text into chunks under maxLen, breaking at sentence boundaries
+const MAX_TTS_CHARS = 5000;
+
+function chunkText(text, maxLen = MAX_TTS_CHARS) {
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+    // Find last sentence-ending punctuation within the limit
+    let cut = -1;
+    for (let i = maxLen - 1; i >= 0; i--) {
+      if (remaining[i] === '.' || remaining[i] === '!' || remaining[i] === '?') {
+        cut = i + 1;
+        break;
+      }
+    }
+    // Fall back to last space if no sentence boundary found
+    if (cut <= 0) {
+      cut = remaining.lastIndexOf(' ', maxLen);
+    }
+    // Hard cut as last resort
+    if (cut <= 0) {
+      cut = maxLen;
+    }
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  return chunks;
+}
+
 // WebSocket handler for TTS streaming
 wss.on('connection', (ws) => {
   let aborted = false;
@@ -119,78 +145,49 @@ wss.on('connection', (ws) => {
       }
 
       try {
-        // Use ElevenLabs SDK to create client (validates API key)
         const client = new ElevenLabsClient({ apiKey });
+        const chunks = chunkText(text);
+        let timeOffset = 0;
 
-        // Use the streaming-with-timestamps REST endpoint for alignment data.
-        // The SDK handles basic streaming, but we need the timestamps variant
-        // for word-level synchronization.
-        const response = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-with-timestamps`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'xi-api-key': apiKey,
-            },
-            body: JSON.stringify({
-              text,
-              model_id: modelId,
-              output_format: 'mp3_44100_128',
-            }),
-          }
-        );
+        for (const chunkText of chunks) {
+          if (aborted) break;
 
-        if (!response.ok) {
-          const errBody = await response.text();
-          console.error('ElevenLabs API error:', response.status, errBody);
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: `ElevenLabs API error: ${response.status}`,
-          }));
-          return;
-        }
+          const stream = await client.textToSpeech.streamWithTimestamps(voiceId, {
+            text: chunkText,
+            modelId,
+            outputFormat: 'mp3_44100_128',
+          });
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+          let chunkMaxEnd = 0;
 
-        while (!aborted) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          for await (const item of stream) {
+            if (aborted) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop(); // keep incomplete line in buffer
+            if (item.audioBase64) {
+              ws.send(JSON.stringify({
+                type: 'audio',
+                audio: item.audioBase64,
+              }));
+            }
 
-          for (const line of lines) {
-            if (!line.trim() || aborted) continue;
-            try {
-              const chunk = JSON.parse(line);
-
-              // Forward audio chunk
-              if (chunk.audio_base64) {
+            const alignment = item.alignment || item.normalizedAlignment;
+            if (alignment) {
+              const wordTimings = extractWordTimings(alignment);
+              if (wordTimings.length > 0) {
+                for (const wt of wordTimings) {
+                  wt.startTime += timeOffset;
+                  wt.endTime += timeOffset;
+                  if (wt.endTime > chunkMaxEnd) chunkMaxEnd = wt.endTime;
+                }
                 ws.send(JSON.stringify({
-                  type: 'audio',
-                  audio: chunk.audio_base64,
+                  type: 'timing',
+                  words: wordTimings,
                 }));
               }
-
-              // Forward word-level timing derived from alignment
-              const alignment = chunk.alignment || chunk.normalizedAlignment;
-              if (alignment) {
-                const wordTimings = extractWordTimings(alignment);
-                if (wordTimings.length > 0) {
-                  ws.send(JSON.stringify({
-                    type: 'timing',
-                    words: wordTimings,
-                  }));
-                }
-              }
-            } catch {
-              // skip malformed JSON lines
             }
           }
+
+          timeOffset = chunkMaxEnd;
         }
 
         if (!aborted) {
