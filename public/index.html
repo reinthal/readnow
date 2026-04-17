@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReadNow</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sliding word window - fixed at top -->
+    <header id="word-window" class="hidden">
+      <div id="words-container"></div>
+    </header>
+
+    <!-- Controls bar -->
+    <div id="controls" class="hidden">
+      <button id="play-btn" title="Play / Pause">
+        <svg id="icon-play" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+          <polygon points="5,3 19,12 5,21"/>
+        </svg>
+        <svg id="icon-pause" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" class="hidden">
+          <rect x="5" y="3" width="4" height="18"/>
+          <rect x="15" y="3" width="4" height="18"/>
+        </svg>
+      </button>
+      <button id="stop-btn" title="Stop and reset">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+        </svg>
+      </button>
+      <div id="progress-info">
+        <span id="word-counter">0 / 0 words</span>
+      </div>
+      <div id="settings">
+        <label title="Number of words shown in the sliding window">
+          Window
+          <input type="number" id="window-size" value="7" min="3" max="21" step="2">
+        </label>
+      </div>
+      <button id="new-pdf-btn" title="Load a different PDF">New PDF</button>
+      <button id="theme-btn" title="Toggle light/dark mode">
+        <svg id="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+        </svg>
+        <svg id="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" class="hidden">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Drop zone -->
+    <div id="drop-zone">
+      <div id="drop-zone-content">
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <polyline points="9 15 12 12 15 15"/>
+        </svg>
+        <p class="drop-title">Drop a PDF here</p>
+        <p class="drop-subtitle">or</p>
+        <button id="file-btn">Choose File</button>
+        <input type="file" id="file-input" accept=".pdf" hidden>
+        <p class="drop-hint">Only text-based PDFs are supported</p>
+      </div>
+    </div>
+
+    <!-- PDF viewer -->
+    <div id="pdf-viewer" class="hidden">
+      <div id="pdf-pages"></div>
+    </div>
+
+    <!-- Status / error overlay -->
+    <div id="status-overlay" class="hidden">
+      <p id="status-message"></p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
